@@ -7,7 +7,4 @@ streamlit
 pathlib
 datetime
 htbuilder
-google-api-python-client
-google-auth
-google-auth-httplib2
 scikit-learn

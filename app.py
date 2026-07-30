@@ -8,11 +8,10 @@ import pickle
 from deployment import scrape_films_details, scrape_films, scrape_friends, list_friends, recommend_movies, DOMAIN, classify_popularity, classify_likeability, classify_runtime
 from pathlib import Path
 from datetime import date
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from sklearn.preprocessing import StandardScaler
 import os
 import datetime
+import csv
 
 
 def delete_old_log_files(log_folder_path):
@@ -32,14 +31,54 @@ def delete_old_log_files(log_folder_path):
 delete_old_log_files('log')
 scaler = StandardScaler()
 
-# Create a connection object.
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-    ],
-)
-service = build('sheets', 'v4', credentials=credentials)
+# Local drop-in replacement for the Google Sheets API.
+# The original app used a Google Sheet purely as shared cache/log storage
+# (to avoid re-scraping the same username on the same day). Since we don't
+# need multi-instance shared state, we store the same data in local CSV
+# files instead, keeping the exact same call interface used below
+# (sheet.values().get(...).execute() / .update(...).execute()).
+class _LocalSheetStore:
+    def __init__(self, base_dir='log_store'):
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(exist_ok=True)
+        self._last_action = None
+        self._last_range = None
+
+    def _path(self, range_str):
+        name = range_str.split('!')[0]
+        return self.base_dir / f"{name}.csv"
+
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return self
+
+    def get(self, spreadsheetId=None, range=None):
+        self._last_action = 'get'
+        self._last_range = range
+        return self
+
+    def update(self, spreadsheetId=None, valueInputOption=None, range=None, body=None):
+        path = self._path(range)
+        rows = (body or {}).get('values', [])
+        with open(path, 'w', newline='') as f:
+            csv.writer(f).writerows(rows)
+        self._last_action = 'update'
+        return self
+
+    def execute(self):
+        if self._last_action == 'get':
+            path = self._path(self._last_range)
+            if path.exists():
+                with open(path, newline='') as f:
+                    values = list(csv.reader(f))
+            else:
+                values = []
+            return {'values': values}
+        return {}
+
+service = _LocalSheetStore()
 sheet = service.spreadsheets()
 
 if 'sidebar_state' not in st.session_state:
@@ -111,7 +150,7 @@ if selected_sect == sections[0]:
         today = date.today()
         filename = "{0}_{1}".format(str(today), username)
         # df_log = pd.read_csv("log_detail.csv")
-        result_input = sheet.values().get(spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+        result_input = sheet.values().get(spreadsheetId='local',
                             range='log_detail!A:AA').execute()
         values_input = result_input.get('values', [])
         df_log=pd.DataFrame(values_input[1:], columns=values_input[0])
@@ -135,7 +174,7 @@ if selected_sect == sections[0]:
             new_row = pd.DataFrame({'date':[str(today)], 'username':[username]})
             df_log = pd.concat([df_log, new_row]).reset_index(drop=True)
             response_date = service.spreadsheets().values().update(
-                spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+                spreadsheetId='local',
                 valueInputOption='RAW',
                 range='log_detail!A:AA',
                 body=dict(
@@ -680,7 +719,7 @@ if selected_sect == sections[0]:
         df_weighted['score'] = df_weighted['count']+df_weighted['liked']+df_weighted['rating']
 
         if mbti_agree:
-            result_input = sheet.values().get(spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+            result_input = sheet.values().get(spreadsheetId='local',
                             range='mbti!A:AA').execute()
             values_input = result_input.get('values', [])
             df_log_mbti=pd.DataFrame(values_input[1:], columns=values_input[0])
@@ -692,7 +731,7 @@ if selected_sect == sections[0]:
             df_log_mbti = pd.concat([df_log_mbti, df_mbti_genre]).reset_index(drop=True)
             df_log_mbti.drop_duplicates(['username','mbti','genre'], inplace=True)
             response_date = service.spreadsheets().values().update(
-                spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+                spreadsheetId='local',
                 valueInputOption='RAW',
                 range='mbti!A:AA',
                 body=dict(
@@ -895,7 +934,7 @@ if selected_sect == sections[0]:
         df_temp = df_temp[df_temp['count']>=n_theme]
 
         if mbti_agree:
-            result_input = sheet.values().get(spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+            result_input = sheet.values().get(spreadsheetId='local',
                             range='mbti_theme!A:AA').execute()
             values_input = result_input.get('values', [])
             df_log_mbti=pd.DataFrame(values_input[1:], columns=values_input[0])
@@ -907,7 +946,7 @@ if selected_sect == sections[0]:
             df_log_mbti = pd.concat([df_log_mbti, df_mbti_theme]).reset_index(drop=True)
             df_log_mbti.drop_duplicates(['username','mbti','theme'], inplace=True)
             response_date = service.spreadsheets().values().update(
-                spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+                spreadsheetId='local',
                 valueInputOption='RAW',
                 range='mbti_theme!A:AA',
                 body=dict(
@@ -1020,7 +1059,7 @@ elif selected_sect == sections[1]:
         today = date.today()
         filename = "{0}_{1}_{2}_{3}".format(str(today), username, ftype, str(limit))
         # df_log = pd.read_csv("log.csv")
-        result_input = sheet.values().get(spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+        result_input = sheet.values().get(spreadsheetId='local',
                             range='log!A:AA').execute()
         values_input = result_input.get('values', [])
         df_log=pd.DataFrame(values_input[1:], columns=values_input[0])
@@ -1057,7 +1096,7 @@ elif selected_sect == sections[1]:
             new_row = pd.DataFrame({'date':[str(today)], 'username':[username], 'ftype':[ftype], 'limit':[limit]})
             df_log = pd.concat([df_log, new_row]).reset_index(drop=True)
             response_date = service.spreadsheets().values().update(
-                spreadsheetId=st.secrets['SAMPLE_SPREADSHEET_ID_input'],
+                spreadsheetId='local',
                 valueInputOption='RAW',
                 range='log!A:AA',
                 body=dict(
