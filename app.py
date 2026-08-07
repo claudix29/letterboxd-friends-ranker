@@ -160,6 +160,9 @@ if selected_sect == sections[0]:
             df_film = scrape_films(username)
             df_film = df_film[df_film['rating']!=-1].reset_index(drop=True)
             st.write("You have {0} movies to scrape".format(len(df_film)))
+            if len(df_film) == 0:
+                st.warning("Non ho trovato film valutati (con una rating, non solo 'watched') su questo profilo Letterboxd. Assicurati di aver dato almeno un voto a qualche film, oppure che il profilo non sia privato.")
+                st.stop()
             df_rating, df_actor, df_director, df_genre, df_theme = scrape_films_details(df_film, username)
 
             # export file
@@ -245,10 +248,16 @@ if selected_sect == sections[0]:
             )
         # data_temp = df_film['rating'].astype(str).value_counts().reset_index()
         # data_temp.rename(columns = {'index':'rating', 'rating':'count'}, inplace=True)
-        df_rating['runtime_group'] = df_rating.apply(lambda row:classify_runtime(row['runtime']), axis=1)
-        df_rating['ltw_ratio'] = df_rating['liked_by']/df_rating['watched_by']
-        df_rating['popularity'] = df_rating.apply(lambda row: classify_popularity(row['watched_by']), axis=1)
-        df_rating['likeability'] = df_rating.apply(lambda row: classify_likeability(row['ltw_ratio']), axis=1)
+        if len(df_rating) > 0:
+            df_rating['runtime_group'] = df_rating.apply(lambda row:classify_runtime(row['runtime']), axis=1)
+            df_rating['ltw_ratio'] = df_rating['liked_by']/df_rating['watched_by']
+            df_rating['popularity'] = df_rating.apply(lambda row: classify_popularity(row['watched_by']), axis=1)
+            df_rating['likeability'] = df_rating.apply(lambda row: classify_likeability(row['ltw_ratio']), axis=1)
+        else:
+            df_rating['runtime_group'] = pd.Series(dtype='object')
+            df_rating['ltw_ratio'] = pd.Series(dtype='float64')
+            df_rating['popularity'] = pd.Series(dtype='object')
+            df_rating['likeability'] = pd.Series(dtype='object')
         df_rating_merged = pd.merge(df_film, df_rating, left_on='id', right_on='id')
         df_rating_merged['rating'] = df_rating_merged['rating'].astype(float)
         df_rating_merged['avg_rating'] = df_rating_merged['avg_rating'].astype(float)

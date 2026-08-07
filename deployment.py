@@ -418,7 +418,10 @@ def scrape_films_details(df_film, username):
 
         bar.progress(progress/len(df_film))
     df_rating = pd.DataFrame(movies_rating)
-    df_rating['decade'] = df_rating.apply(lambda row: decade_year(int(row['year'])), axis=1)
+    if len(df_rating) > 0:
+        df_rating['decade'] = df_rating.apply(lambda row: decade_year(int(row['year'])), axis=1)
+    else:
+        df_rating['decade'] = pd.Series(dtype='object')
     df_actor = pd.DataFrame(movies_actor)
     df_director = pd.DataFrame(movies_director)
     df_genre = pd.DataFrame(movies_genre)
