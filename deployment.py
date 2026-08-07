@@ -44,7 +44,10 @@ def scrape_films(username):
     url = DOMAIN + "/" + username + "/films/"
     url_page = scraper.get(url)
     if url_page.status_code != 200:
-        st.error("Error")
+        raise RuntimeError(
+            "Letterboxd ha risposto con HTTP {0} per {1}. Possibile blocco anti-bot/Cloudflare "
+            "sull'IP del server, rate limiting, o username inesistente/profilo privato.".format(
+                url_page.status_code, url))
     soup = BeautifulSoup(url_page.content, 'html.parser')
     
     # check number of pages
@@ -64,7 +67,9 @@ def scrape_films(username):
             url = DOMAIN + "/" + username + "/films/page/" + str(i+1)
             url_page = scraper.get(url)
             if url_page.status_code != 200:
-                st.error("Error")
+                raise RuntimeError(
+                    "Letterboxd ha risposto con HTTP {0} per {1}. Possibile blocco anti-bot/Cloudflare "
+                    "sull'IP del server o rate limiting.".format(url_page.status_code, url))
             soup = BeautifulSoup(url_page.content, 'html.parser')
             ul = soup.find("ul", {"class": "grid"})
             if (ul != None):
@@ -361,7 +366,7 @@ def scrape_films_details(df_film, username):
             url_movie = DOMAIN + link
             url_movie_page = scraper.get(url_movie)
             if url_movie_page.status_code != 200:
-                st.error("Error")
+                st.error("Errore HTTP {0} scaricando {1}".format(url_movie_page.status_code, url_movie))
             soup_movie = BeautifulSoup(url_movie_page.content, 'html.parser')
             for sc in soup_movie.findAll("script"):
                 if sc.string != None:

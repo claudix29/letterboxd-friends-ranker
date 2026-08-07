@@ -157,11 +157,15 @@ if selected_sect == sections[0]:
         df_found = df_log[(df_log['date'] == str(today)) & (df_log['username'] == username)].reset_index(drop=True)
         if len(df_found) != 1:
             # scraping process
-            df_film = scrape_films(username)
+            try:
+                df_film = scrape_films(username)
+            except RuntimeError as e:
+                st.error("Scraping fallito: {0}".format(e))
+                st.stop()
             df_film = df_film[df_film['rating']!=-1].reset_index(drop=True)
             st.write("You have {0} movies to scrape".format(len(df_film)))
             if len(df_film) == 0:
-                st.warning("Non ho trovato film valutati (con una rating, non solo 'watched') su questo profilo Letterboxd. Assicurati di aver dato almeno un voto a qualche film, oppure che il profilo non sia privato.")
+                st.warning("Il profilo è stato scaricato correttamente ma non ho trovato film con un voto (rating), solo eventuali 'watched'. Assicurati di aver dato almeno un voto a qualche film, oppure che il profilo non sia privato.")
                 st.stop()
             df_rating, df_actor, df_director, df_genre, df_theme = scrape_films_details(df_film, username)
 
